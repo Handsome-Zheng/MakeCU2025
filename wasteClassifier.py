@@ -39,7 +39,7 @@ if __name__ == '__main__':
 # ==================== CONFIGURATION ====================
 class Config:
     # Paths (modify these to point to your dataset)
-    DATA_DIR = '/Users/minhthanhnguyen/Desktop/robotics/data/wasteData/images/images'
+    DATA_DIR = 'data'
     
     # Data split ratios
     TRAIN_RATIO = 0.7
