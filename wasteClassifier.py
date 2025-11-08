@@ -36,11 +36,19 @@ else:
 if __name__ == '__main__':
     print(f'Using device: {device}')
 
+# --- Prefer CUDA if available (ADDED) ---
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+print(f'Final device for training: {device}')
+# ---------------------------------------
+
 # ==================== CONFIGURATION ====================
 class Config:
     # Paths (modify these to point to your dataset)
-    DATA_DIR = 'images'
-    
+    DATA_DIR = 'data'
+    MODEL_SAVE_PATH = 'best_waste_classifier.pth'
     # Data split ratios
     TRAIN_RATIO = 0.7
     VAL_RATIO = 0.15
@@ -504,3 +512,33 @@ if __name__ == '__main__':
     # Example inference (uncomment to use)
     # model, class_names = load_trained_model()
     # predict_image(model, 'path/to/test/image.jpg', class_names)
+
+    # ==================== EXPORT (ADDED) ====================
+    # Load best checkpoint on CPU for portable export
+    ckpt = torch.load('best_waste_classifier.pth', map_location='cpu')
+    export_class_names = ckpt['class_names']
+    export_num_classes = len(export_class_names)
+
+    export_model = WasteClassifier(config.MODEL_NAME, export_num_classes, pretrained=False)
+    export_model.load_state_dict(ckpt['model_state_dict'])
+    export_model.eval()
+
+    ex = torch.randn(1, 3, config.IMG_SIZE, config.IMG_SIZE)
+
+    # TorchScript
+    with torch.inference_mode():
+        ts = torch.jit.trace(export_model, ex)
+    ts.save('model.ts')
+
+    # ONNX (dynamic batch)
+    torch.onnx.export(
+        export_model, ex, 'model.onnx',
+        input_names=['input'], output_names=['logits'],
+        opset_version=12, dynamic_axes={'input': {0: 'batch'}, 'logits': {0: 'batch'}}
+    )
+
+    # Labels
+    import json
+    json.dump(export_class_names, open('labels.json', 'w'))
+
+    print('✓ Exported: model.ts, model.onnx, labels.json')
